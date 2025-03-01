@@ -151,6 +151,11 @@ class GeminiEmbedder(Embeddings):
 
 # Constants
 COLLECTION_NAME = "gemini-thinking-agent-agno"
+INITIAL_URLS = [
+    "https://www.fda.gov/media/163132/download",
+    "https://www.fda.gov/food/food-safety-modernization-act-fsma/fsma-final-rule-requirements-additional-traceability-records-certain-foods",
+    "https://www.fmi.org/food-safety/traceability-rule"
+]
 
 
 # Streamlit App Initialization
@@ -178,9 +183,11 @@ if 'force_web_search' not in st.session_state:
 if 'similarity_threshold' not in st.session_state:
     st.session_state.similarity_threshold = 0.7
 if 'url_list' not in st.session_state:
-    st.session_state.url_list = []
+    st.session_state.url_list = INITIAL_URLS.copy()  # Initialize with our predefined URLs
 if 'url_input' not in st.session_state:
     st.session_state.url_input = ""
+if 'initial_urls_processed' not in st.session_state:
+    st.session_state.initial_urls_processed = False
 
 
 # Sidebar Configuration
@@ -461,6 +468,23 @@ if st.session_state.google_api_key:
     
     qdrant_client = init_qdrant()
     
+    # Process initial URLs if not done yet
+    if not st.session_state.initial_urls_processed and qdrant_client:
+        with st.spinner('Processing initial URLs...'):
+            for url in INITIAL_URLS:
+                if url not in st.session_state.processed_documents:
+                    texts = process_web(url)
+                    if texts and qdrant_client:
+                        if st.session_state.vector_store:
+                            st.session_state.vector_store.add_documents(texts)
+                        else:
+                            st.session_state.vector_store = create_vector_store(qdrant_client, texts)
+                        st.session_state.processed_documents.append(url)
+                        if url in st.session_state.url_list:
+                            st.session_state.url_list.remove(url)
+            st.session_state.initial_urls_processed = True
+            st.success("✅ Initial URLs processed successfully!")
+            
     # File/URL Upload Section
     st.sidebar.header("📁 Data Upload")
     uploaded_files = st.sidebar.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
