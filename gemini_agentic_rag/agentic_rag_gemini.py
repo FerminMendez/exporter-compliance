@@ -182,39 +182,38 @@ if 'initial_urls_processed' not in st.session_state:
 
 
 # Sidebar Configuration
-st.sidebar.header("🔑 API Configuration Status")
+st.sidebar.header("🔑 API Configuration")
+google_api_key = st.sidebar.text_input(
+    "Google API Key", 
+    type="password",
+    value=st.session_state.google_api_key,
+    help="Enter your Google API Key or set it in the .env file"
+)
+qdrant_api_key = st.sidebar.text_input(
+    "Qdrant API Key",
+    type="password",
+    value=st.session_state.qdrant_api_key,
+    help="Enter your Qdrant API Key or set it in the .env file"
+)
+qdrant_url = st.sidebar.text_input(
+    "Qdrant URL", 
+    placeholder="https://your-cluster.cloud.qdrant.io:6333",
+    value=st.session_state.qdrant_url,
+    help="Enter your Qdrant URL or set it in the .env file"
+)
 
-# API Status Indicators
-api_status_container = st.sidebar.container()
-with api_status_container:
-    # Google API Status
-    if st.session_state.google_api_key:
-        st.success("✅ Google API Key: Configured")
-    else:
-        st.error("❌ Google API Key: Not configured in .env")
-    
-    # Qdrant API Status
-    if st.session_state.qdrant_api_key and st.session_state.qdrant_url:
-        st.success("✅ Qdrant: Configured")
-    else:
-        st.error("❌ Qdrant: Not fully configured in .env")
-    
-    # Exa API Status (only if web search is enabled)
-    if st.session_state.use_web_search:
-        if st.session_state.exa_api_key:
-            st.success("✅ Exa AI API Key: Configured")
-        else:
-            st.warning("⚠️ Exa AI API Key: Not configured in .env (required for web search)")
-
-    # Help text
-    st.info("ℹ️ API keys are loaded from .env file. Edit the .env file to update configurations.")
 
 # Clear Chat Button
 if st.sidebar.button("🗑️ Clear Chat History"):
     st.session_state.history = []
     st.rerun()
 
-# Web Search Configuration
+# Update session state
+st.session_state.google_api_key = google_api_key or os.getenv('GOOGLE_API_KEY', '')
+st.session_state.qdrant_api_key = qdrant_api_key or os.getenv('QDRANT_API_KEY', '')
+st.session_state.qdrant_url = qdrant_url or os.getenv('QDRANT_URL', '')
+
+# Add in the sidebar configuration section, after the existing API inputs
 st.sidebar.header("🌐 Web Search Configuration")
 st.session_state.use_web_search = st.sidebar.checkbox(
     "Enable Web Search Fallback",
@@ -223,6 +222,14 @@ st.session_state.use_web_search = st.sidebar.checkbox(
 )
 
 if st.session_state.use_web_search:
+    exa_api_key = st.sidebar.text_input(
+        "Exa AI API Key", 
+        type="password",
+        value=st.session_state.exa_api_key,
+        help="Enter your Exa AI API Key or set it in the .env file"
+    )
+    st.session_state.exa_api_key = exa_api_key or os.getenv('EXA_API_KEY', '')
+    
     # Optional domain filtering
     default_domains = ["arxiv.org", "wikipedia.org", "github.com", "medium.com"]
     custom_domains = st.sidebar.text_input(
@@ -232,7 +239,7 @@ if st.session_state.use_web_search:
     )
     search_domains = [d.strip() for d in custom_domains.split(",") if d.strip()]
 
-# Search Configuration
+# Add this to the sidebar configuration section
 st.sidebar.header("🎯 Search Configuration")
 st.session_state.similarity_threshold = st.sidebar.slider(
     "Document Similarity Threshold",
