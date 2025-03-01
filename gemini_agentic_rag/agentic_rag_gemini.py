@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List
 import speech_recognition as sr
 import time
+import numpy as np
 
 import streamlit as st
 import google.generativeai as genai
@@ -19,7 +20,13 @@ from langchain_core.embeddings import Embeddings
 from agno.tools.exa import ExaTools
 
 # Voice recording settings
-RECORDING_DURATION = 5  # seconds
+SILENCE_THRESHOLD = 1.0  # Adjust this value based on testing
+MIN_SILENCE_DURATION = 1.5  # Seconds of silence before stopping
+MAX_RECORDING_DURATION = 30  # Maximum recording duration in seconds
+
+def detect_silence(audio_data, threshold):
+    """Detect if the audio segment is silence."""
+    return np.mean(np.abs(audio_data)) < threshold
 
 def record_and_transcribe():
     """Record audio from microphone and transcribe it directly."""
@@ -27,19 +34,59 @@ def record_and_transcribe():
         recognizer = sr.Recognizer()
         with sr.Microphone() as source:
             st.info("🎙️ Adjusting for ambient noise... Please wait.")
-            # Adjust for ambient noise
+            # Adjust for ambient noise and set dynamic threshold
             recognizer.adjust_for_ambient_noise(source, duration=1)
-            st.info("🎙️ Listening... Speak now!")
-            # Record audio
+            dynamic_threshold = recognizer.energy_threshold * 1.2
+            st.info("🎙️ Ready to record! Start speaking...")
+            
+            # Create a progress placeholder
+            progress_placeholder = st.empty()
+            status_placeholder = st.empty()
+            
+            # Initialize recording variables
+            start_time = time.time()
+            last_sound_time = start_time
+            recording = True
+            
             try:
-                audio = recognizer.listen(source, timeout=RECORDING_DURATION, phrase_time_limit=RECORDING_DURATION)
-                st.info("🎙️ Processing your speech...")
+                # Start recording with dynamic silence detection
+                audio = recognizer.listen(
+                    source,
+                    timeout=None,  # No timeout
+                    phrase_time_limit=MAX_RECORDING_DURATION
+                )
+                
+                while recording:
+                    elapsed_time = time.time() - start_time
+                    silence_duration = time.time() - last_sound_time
+                    
+                    # Update progress bar
+                    progress = min(elapsed_time / MAX_RECORDING_DURATION * 100, 100)
+                    progress_placeholder.progress(int(progress))
+                    
+                    # Update status message
+                    status_placeholder.info(f"🎙️ Recording... {int(elapsed_time)}s (Will stop after {MIN_SILENCE_DURATION}s of silence)")
+                    
+                    # Check for silence
+                    if silence_duration >= MIN_SILENCE_DURATION:
+                        recording = False
+                        status_placeholder.success("✅ Recording complete! Processing your speech...")
+                    
+                    # Check for maximum duration
+                    if elapsed_time >= MAX_RECORDING_DURATION:
+                        recording = False
+                        status_placeholder.warning("⚠️ Maximum recording duration reached")
+                    
+                    time.sleep(0.1)  # Small delay to prevent excessive updates
+                
                 # Transcribe audio using Google Speech Recognition
                 text = recognizer.recognize_google(audio)
                 return text
+                
             except sr.WaitTimeoutError:
-                st.warning("No speech detected within the time limit.")
+                st.warning("No speech detected.")
                 return None
+                
     except sr.UnknownValueError:
         st.warning("Could not understand the audio. Please try again.")
         return None
@@ -544,7 +591,7 @@ if st.session_state.google_api_key:
         prompt = st.chat_input("Ask about your documents...")
 
     with voice_col:
-        voice_button = st.button("🎤", help=f"Click to record voice input (Duration: {RECORDING_DURATION} seconds)")
+        voice_button = st.button("🎤", help="Click to start recording. Recording will automatically stop after silence is detected or after 30 seconds.")
         
         if voice_button:
             # Use the full width for recording feedback

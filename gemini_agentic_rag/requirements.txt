@@ -14,3 +14,4 @@ SpeechRecognition>=3.10.0
 sounddevice>=0.4.6
 numpy>=1.24.0
 wave>=0.0.2
+pyaudio>=0.2.13
