@@ -1,5 +1,6 @@
 streamlit>=1.28.0
 google-generativeai>=0.3.0
+google-genai
 beautifulsoup4>=4.12.0
 agno>=0.1.0
 langchain>=0.1.0
