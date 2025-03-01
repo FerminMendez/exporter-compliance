@@ -3,10 +3,6 @@ import tempfile
 from datetime import datetime
 from typing import List
 import speech_recognition as sr
-import sounddevice as sd
-import numpy as np
-import wave
-import io
 import time
 
 import streamlit as st
@@ -23,24 +19,35 @@ from langchain_core.embeddings import Embeddings
 from agno.tools.exa import ExaTools
 
 # Voice recording settings
-SAMPLE_RATE = 44100
-CHANNELS = 1
 RECORDING_DURATION = 5  # seconds
 
-def record_audio():
-    """Record audio from microphone and return the audio data."""
+def record_and_transcribe():
+    """Record audio from microphone and transcribe it directly."""
     try:
-        # Record audio
-        recording = sd.rec(
-            int(RECORDING_DURATION * SAMPLE_RATE),
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype=np.int16
-        )
-        sd.wait()
-        return recording
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            st.info("🎙️ Adjusting for ambient noise... Please wait.")
+            # Adjust for ambient noise
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+            st.info("🎙️ Listening... Speak now!")
+            # Record audio
+            try:
+                audio = recognizer.listen(source, timeout=RECORDING_DURATION, phrase_time_limit=RECORDING_DURATION)
+                st.info("🎙️ Processing your speech...")
+                # Transcribe audio using Google Speech Recognition
+                text = recognizer.recognize_google(audio)
+                return text
+            except sr.WaitTimeoutError:
+                st.warning("No speech detected within the time limit.")
+                return None
+    except sr.UnknownValueError:
+        st.warning("Could not understand the audio. Please try again.")
+        return None
+    except sr.RequestError as e:
+        st.error(f"Could not request results from speech recognition service: {str(e)}")
+        return None
     except Exception as e:
-        st.error(f"Error recording audio: {str(e)}")
+        st.error(f"Error during recording: {str(e)}")
         return None
 
 def save_audio_to_wav(audio_data):
@@ -542,43 +549,14 @@ if st.session_state.google_api_key:
         if voice_button:
             # Use the full width for recording feedback
             with voice_modal.container():
-                st.markdown("### 🎙️ Recording in Progress")
-                st.info(f"Please speak now. Recording will stop automatically after {RECORDING_DURATION} seconds.")
+                st.markdown("### 🎙️ Voice Input")
+                # Record and transcribe
+                transcribed_text = record_and_transcribe()
                 
-                col1, col2 = st.columns([0.7, 0.3])
-                with col1:
-                    progress_bar = st.progress(0)
-                with col2:
-                    countdown = st.empty()
-                
-                # Record audio with visual feedback
-                for i in range(RECORDING_DURATION):
-                    if i == 0:  # Only record once at the start
-                        audio_data = record_audio()
-                    progress = (i + 1) / RECORDING_DURATION
-                    progress_bar.progress(progress)
-                    countdown.markdown(f"**Time left:** {RECORDING_DURATION - i} seconds")
-                    time.sleep(1)
-                
-                if audio_data is not None:
-                    # Convert audio to WAV format
-                    wav_buffer = save_audio_to_wav(audio_data)
-                    if wav_buffer:
-                        # Reset buffer position
-                        wav_buffer.seek(0)
-                        # Transcribe audio to text
-                        with st.spinner("Transcribing your message..."):
-                            transcribed_text = transcribe_audio(wav_buffer)
-                            if transcribed_text:
-                                prompt = transcribed_text
-                                st.success("✅ Successfully transcribed!")
-                                st.info(f"Your message: {transcribed_text}")
-                            else:
-                                st.error("❌ Could not transcribe the audio. Please try again.")
-                    else:
-                        st.error("❌ Error processing audio. Please try again.")
-                else:
-                    st.error("❌ Error recording audio. Please check your microphone and try again.")
+                if transcribed_text:
+                    prompt = transcribed_text
+                    st.success("✅ Successfully transcribed!")
+                    st.info(f"Your message: {transcribed_text}")
             
             # Clear the modal after processing
             time.sleep(2)
