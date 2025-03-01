@@ -5,8 +5,6 @@ from typing import List
 import speech_recognition as sr
 import time
 import numpy as np
-import json
-from dotenv import load_dotenv
 
 import streamlit as st
 import google.generativeai as genai
@@ -20,9 +18,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from langchain_core.embeddings import Embeddings
 from agno.tools.exa import ExaTools
-
-# Load environment variables
-load_dotenv()
 
 # Voice recording settings
 RECORDING_DURATION = 10  # seconds
@@ -137,28 +132,23 @@ class GeminiEmbedder(Embeddings):
 
 # Constants
 COLLECTION_NAME = "gemini-thinking-agent-agno"
-
-# Load initial URLs from environment
-try:
-    INITIAL_URLS = json.loads(os.getenv('INITIAL_URLS', '[]'))
-except json.JSONDecodeError:
-    INITIAL_URLS = [
-        "https://www.fda.gov/media/163132/download",
-        "https://www.fda.gov/food/food-safety-modernization-act-fsma/fsma-final-rule-requirements-additional-traceability-records-certain-foods",
-        "https://www.fmi.org/food-safety/traceability-rule"
-    ]
+INITIAL_URLS = [
+    "https://www.fda.gov/media/163132/download",
+    "https://www.fda.gov/food/food-safety-modernization-act-fsma/fsma-final-rule-requirements-additional-traceability-records-certain-foods",
+    "https://www.fmi.org/food-safety/traceability-rule"
+]
 
 
 # Streamlit App Initialization
 st.title("🤔 FDA Agent. RAG with Gemini")
 
-# Session State Initialization with environment variables
+# Session State Initialization
 if 'google_api_key' not in st.session_state:
-    st.session_state.google_api_key = os.getenv('GOOGLE_API_KEY', '')
+    st.session_state.google_api_key = ""
 if 'qdrant_api_key' not in st.session_state:
-    st.session_state.qdrant_api_key = os.getenv('QDRANT_API_KEY', '')
+    st.session_state.qdrant_api_key = ""
 if 'qdrant_url' not in st.session_state:
-    st.session_state.qdrant_url = os.getenv('QDRANT_URL', '')
+    st.session_state.qdrant_url = ""
 if 'vector_store' not in st.session_state:
     st.session_state.vector_store = None
 if 'processed_documents' not in st.session_state:
@@ -166,15 +156,15 @@ if 'processed_documents' not in st.session_state:
 if 'history' not in st.session_state:
     st.session_state.history = []
 if 'exa_api_key' not in st.session_state:
-    st.session_state.exa_api_key = os.getenv('EXA_API_KEY', '')
+    st.session_state.exa_api_key = ""
 if 'use_web_search' not in st.session_state:
-    st.session_state.use_web_search = os.getenv('USE_WEB_SEARCH', 'false').lower() == 'true'
+    st.session_state.use_web_search = False
 if 'force_web_search' not in st.session_state:
     st.session_state.force_web_search = False
 if 'similarity_threshold' not in st.session_state:
-    st.session_state.similarity_threshold = float(os.getenv('SIMILARITY_THRESHOLD', '0.7'))
+    st.session_state.similarity_threshold = 0.7
 if 'url_list' not in st.session_state:
-    st.session_state.url_list = INITIAL_URLS.copy()
+    st.session_state.url_list = INITIAL_URLS.copy()  # Initialize with our predefined URLs
 if 'url_input' not in st.session_state:
     st.session_state.url_input = ""
 if 'initial_urls_processed' not in st.session_state:
@@ -183,24 +173,11 @@ if 'initial_urls_processed' not in st.session_state:
 
 # Sidebar Configuration
 st.sidebar.header("🔑 API Configuration")
-google_api_key = st.sidebar.text_input(
-    "Google API Key", 
-    type="password",
-    value=st.session_state.google_api_key,
-    help="Enter your Google API Key or set it in the .env file"
-)
-qdrant_api_key = st.sidebar.text_input(
-    "Qdrant API Key",
-    type="password",
-    value=st.session_state.qdrant_api_key,
-    help="Enter your Qdrant API Key or set it in the .env file"
-)
-qdrant_url = st.sidebar.text_input(
-    "Qdrant URL", 
-    placeholder="https://your-cluster.cloud.qdrant.io:6333",
-    value=st.session_state.qdrant_url,
-    help="Enter your Qdrant URL or set it in the .env file"
-)
+google_api_key = st.sidebar.text_input("Google API Key", type="password", value=st.session_state.google_api_key)
+qdrant_api_key = st.sidebar.text_input("Qdrant API Key", type="password", value=st.session_state.qdrant_api_key)
+qdrant_url = st.sidebar.text_input("Qdrant URL", 
+                                 placeholder="https://your-cluster.cloud.qdrant.io:6333",
+                                 value=st.session_state.qdrant_url)
 
 
 # Clear Chat Button
@@ -209,26 +186,22 @@ if st.sidebar.button("🗑️ Clear Chat History"):
     st.rerun()
 
 # Update session state
-st.session_state.google_api_key = google_api_key or os.getenv('GOOGLE_API_KEY', '')
-st.session_state.qdrant_api_key = qdrant_api_key or os.getenv('QDRANT_API_KEY', '')
-st.session_state.qdrant_url = qdrant_url or os.getenv('QDRANT_URL', '')
+st.session_state.google_api_key = google_api_key
+st.session_state.qdrant_api_key = qdrant_api_key
+st.session_state.qdrant_url = qdrant_url
 
 # Add in the sidebar configuration section, after the existing API inputs
 st.sidebar.header("🌐 Web Search Configuration")
-st.session_state.use_web_search = st.sidebar.checkbox(
-    "Enable Web Search Fallback",
-    value=st.session_state.use_web_search,
-    help="Enable web search fallback or set it in the .env file"
-)
+st.session_state.use_web_search = st.sidebar.checkbox("Enable Web Search Fallback", value=st.session_state.use_web_search)
 
 if st.session_state.use_web_search:
     exa_api_key = st.sidebar.text_input(
         "Exa AI API Key", 
         type="password",
         value=st.session_state.exa_api_key,
-        help="Enter your Exa AI API Key or set it in the .env file"
+        help="Required for web search fallback when no relevant documents are found"
     )
-    st.session_state.exa_api_key = exa_api_key or os.getenv('EXA_API_KEY', '')
+    st.session_state.exa_api_key = exa_api_key
     
     # Optional domain filtering
     default_domains = ["arxiv.org", "wikipedia.org", "github.com", "medium.com"]
@@ -245,7 +218,7 @@ st.session_state.similarity_threshold = st.sidebar.slider(
     "Document Similarity Threshold",
     min_value=0.0,
     max_value=1.0,
-    value=float(os.getenv('SIMILARITY_THRESHOLD', '0.7')),
+    value=0.7,
     help="Lower values will return more documents but might be less relevant. Higher values are more strict."
 )
 
