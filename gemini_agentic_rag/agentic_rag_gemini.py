@@ -107,7 +107,7 @@ COLLECTION_NAME = "gemini-thinking-agent-agno"
 
 
 # Streamlit App Initialization
-st.title("🤔 Agentic RAG with Gemini Thinking and Agno")
+st.title("🤔 FDA Agent. RAG with Gemini")
 
 # Session State Initialization
 if 'google_api_key' not in st.session_state:
